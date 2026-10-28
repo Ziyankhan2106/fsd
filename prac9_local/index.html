@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Practical 9 - Role-Based Access Control (RBAC)</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 25px;
+      background-color: #f8f9fa;
+      color: #333;
+    }
+    h1 {
+      margin-bottom: 5px;
+    }
+    .subtitle {
+      color: #666;
+      margin-top: 0;
+      margin-bottom: 20px;
+    }
+    .box {
+      background: #fff;
+      border: 1px solid #dcdcdc;
+      border-radius: 6px;
+      padding: 16px;
+      margin-bottom: 18px;
+      max-width: 520px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: bold;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-admin { background: #dc3545; color: #fff; }
+    .badge-faculty { background: #fd7e14; color: #fff; }
+    .badge-student { background: #0d6efd; color: #fff; }
+    .badge-info { background: #6c757d; color: #fff; }
+
+    .role-indicator {
+      float: right;
+      font-size: 12px;
+      color: #555;
+    }
+
+    label {
+      display: block;
+      margin-top: 8px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 7px;
+      margin-top: 4px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    button, input[type="submit"] {
+      margin-top: 10px;
+      padding: 7px 14px;
+      border: none;
+      border-radius: 4px;
+      background-color: #0d6efd;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover, input[type="submit"]:hover {
+      background-color: #0b5ed7;
+    }
+    .btn-danger { background-color: #dc3545; }
+    .btn-danger:hover { background-color: #bb2d3b; }
+    .btn-secondary { background-color: #6c757d; }
+    .btn-secondary:hover { background-color: #5c636a; }
+
+    .demo-btn {
+      padding: 5px 10px;
+      font-size: 12px;
+      margin-right: 5px;
+      margin-top: 5px;
+      background-color: #f1f3f5;
+      color: #212529;
+      border: 1px solid #ced4da;
+    }
+    .demo-btn:hover {
+      background-color: #e9ecef;
+    }
+
+    .links a {
+      display: inline-block;
+      margin-right: 15px;
+      margin-top: 5px;
+      color: #0d6efd;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .links a:hover {
+      text-decoration: underline;
+    }
+
+    .user-bar {
+      background-color: #e8f4fd;
+      border: 1px solid #b6d4fe;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 20px;
+      max-width: 520px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .restricted-overlay {
+      opacity: 0.5;
+      pointer-events: none;
+      position: relative;
+    }
+    .restricted-note {
+      color: #d63384;
+      font-size: 12px;
+      font-weight: bold;
+      margin-top: 5px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px 12px;
+      text-align: left;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Student Management System</h1>
+  <p class="subtitle">Practical 9: Role-Based Authentication & Access Control (In-Memory Auth)</p>
+
+  <!-- 1. LOGIN BOX (Visible if not logged in) -->
+  <div id="loginBox" class="box">
+    <h2>Login</h2>
+    <p style="font-size: 13px; color: #555;">Sign in to access student management actions according to your role.</p>
+
+    <div style="margin-bottom: 12px;">
+      <span style="font-size: 12px; font-weight: bold; color: #444;">Quick Demo Accounts:</span><br>
+      <button type="button" class="demo-btn" onclick="quickFill('admin', '123')">Admin (admin / 123)</button>
+      <button type="button" class="demo-btn" onclick="quickFill('faculty', '123')">Faculty (faculty / 123)</button>
+      <button type="button" class="demo-btn" onclick="quickFill('student', '123')">Student (student / 123)</button>
+    </div>
+
+    <form onsubmit="handleLogin(event)">
+      <label>Username:</label>
+      <input type="text" id="loginUsername" required placeholder="Enter username">
+
+      <label>Password:</label>
+      <input type="password" id="loginPassword" required placeholder="Enter password">
+
+      <button type="submit" style="width: 100%; margin-top: 14px;">Sign In</button>
+    </form>
+  </div>
+
+  <!-- 2. USER PROFILE BAR (Visible when logged in) -->
+  <div id="userBar" class="user-bar" style="display: none;">
+    <div>
+      <strong>Logged in as:</strong> <span id="displayUsername"></span>
+      &nbsp;|&nbsp;
+      <strong>Role:</strong> <span id="displayRoleBadge" class="badge"></span>
+      <div id="rolePermsText" style="font-size: 12px; color: #495057; margin-top: 4px;"></div>
+    </div>
+    <button type="button" class="btn-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="handleLogout()">Sign Out</button>
+  </div>
+
+  <!-- APP CONTENT (Visible once logged in) -->
+  <div id="appContent" style="display: none;">
+
+    <!-- 1. Insert Student -->
+    <div class="box" data-roles="Faculty,Admin">
+      <span class="role-indicator">Allowed: <span class="badge badge-faculty">Faculty</span> <span class="badge badge-admin">Admin</span></span>
+      <h2>Add Student</h2>
+      <div class="restricted-note" style="display:none;">Action restricted for your role.</div>
+      <form action="/insert" method="POST" onsubmit="attachRole(this)">
+        <input type="hidden" name="userRole" class="role-input">
+
+        <label>UID:</label>
+        <input type="text" name="uid" required>
+
+        <label>Name:</label>
+        <input type="text" name="name" required>
+
+        <label>Course:</label>
+        <input type="text" name="course" required>
+
+        <input type="submit" value="Add Record">
+      </form>
+    </div>
+
+    <!-- 2. Update Student -->
+    <div class="box" data-roles="Faculty,Admin">
+      <span class="role-indicator">Allowed: <span class="badge badge-faculty">Faculty</span> <span class="badge badge-admin">Admin</span></span>
+      <h2>Update Student</h2>
+      <div class="restricted-note" style="display:none;">Action restricted for your role.</div>
+      <form action="/update" method="POST" onsubmit="attachRole(this)">
+        <input type="hidden" name="userRole" class="role-input">
+
+        <label>UID to Update:</label>
+        <input type="text" name="uid" required>
+
+        <label>New Name:</label>
+        <input type="text" name="name" required>
+
+        <label>New Course:</label>
+        <input type="text" name="course" required>
+
+        <input type="submit" value="Update Record">
+      </form>
+    </div>
+
+    <!-- 3. Select by UID -->
+    <div class="box" data-roles="Student,Faculty,Admin">
+      <span class="role-indicator">Allowed: <span class="badge badge-info">All Roles</span></span>
+      <h2>Select Record by UID</h2>
+      <form action="/select-record" method="GET" onsubmit="attachRole(this)">
+        <input type="hidden" name="userRole" class="role-input">
+
+        <label>UID:</label>
+        <input type="text" name="uid" required>
+
+        <button type="submit">Search</button>
+      </form>
+    </div>
+
+    <!-- 4. Delete Record -->
+    <div class="box" data-roles="Admin">
+      <span class="role-indicator">Allowed: <span class="badge badge-admin">Admin Only</span></span>
+      <h2>Delete Record</h2>
+      <div class="restricted-note" style="display:none;">Action restricted for your role (Admin required).</div>
+      <form action="/delete" method="POST" onsubmit="attachRole(this)">
+        <input type="hidden" name="userRole" class="role-input">
+
+        <label>UID:</label>
+        <input type="text" name="uid" required>
+
+        <input type="submit" class="btn-danger" value="Delete Record">
+      </form>
+    </div>
+
+    <!-- 5. Operations & Queries -->
+    <div class="box">
+      <h2>Database Queries & Operations</h2>
+      <p class="links">
+        <a href="javascript:void(0)" id="showAllBtn">Select All (All Roles)</a>
+        <a href="javascript:void(0)" onclick="navigateWithRole('/select-unique')">Select Unique Courses (All Roles)</a>
+      </p>
+      <hr style="border: none; border-top: 1px solid #eee; margin: 12px 0;">
+      <p class="links" data-roles="Admin">
+        <span class="badge badge-admin" style="vertical-align: middle;">Admin Only</span>
+        <a href="javascript:void(0)" onclick="navigateWithRole('/drop-table')">Drop Table</a>
+        <a href="javascript:void(0)" onclick="navigateWithRole('/create-table')">Create Table</a>
+      </p>
+      <div class="restricted-note" id="adminLinksRestricted" style="display:none;">Table administration restricted for your role.</div>
+    </div>
+
+    <!-- 6. Display All Records -->
+    <div id="records-container" class="box" style="display: none; max-width: 520px;">
+      <h2>All Student Records</h2>
+      <div id="records-content"></div>
+    </div>
+
+  </div>
+
+  <script>
+    // Quick Demo autofill
+    function quickFill(user, pass) {
+      document.getElementById('loginUsername').value = user;
+      document.getElementById('loginPassword').value = pass;
+    }
+
+    // Login Handler
+    async function handleLogin(e) {
+      e.preventDefault();
+      const username = document.getElementById('loginUsername').value.trim();
+      const password = document.getElementById('loginPassword').value.trim();
+
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await response.json();
+
+        if (!data.success) {
+          alert(data.message || 'Login failed');
+          return;
+        }
+
+        // Save session locally
+        localStorage.setItem('p9_auth_user', JSON.stringify(data.user));
+        renderUI();
+      } catch (err) {
+        alert('Login error: ' + err.message);
+      }
+    }
+
+    // Logout
+    function handleLogout() {
+      localStorage.removeItem('p9_auth_user');
+      const recordsContainer = document.getElementById('records-container');
+      const recordsContent = document.getElementById('records-content');
+      if (recordsContainer) recordsContainer.style.display = 'none';
+      if (recordsContent) recordsContent.innerHTML = '';
+      renderUI();
+    }
+
+    // Get current user from storage
+    function getCurrentUser() {
+      const userStr = localStorage.getItem('p9_auth_user');
+      if (!userStr) return null;
+      try { return JSON.parse(userStr); } catch { return null; }
+    }
+
+    // Attach role to form submission
+    function attachRole(form) {
+      const user = getCurrentUser();
+      const role = user ? user.role : '';
+      const input = form.querySelector('.role-input');
+      if (input) input.value = role;
+    }
+
+    // Navigate to GET links with active role
+    function navigateWithRole(url) {
+      const user = getCurrentUser();
+      const role = user ? user.role : '';
+      window.location.href = url + '?userRole=' + encodeURIComponent(role);
+      // window.location.href = `${url}?userRole=${role}`;
+    }
+
+    // Render UI based on role
+    function renderUI() {
+      const user = getCurrentUser();
+
+      const loginBox = document.getElementById('loginBox');
+      const userBar = document.getElementById('userBar');
+      const appContent = document.getElementById('appContent');
+
+      if (!user) {
+        loginBox.style.display = 'block';
+        userBar.style.display = 'none';
+        appContent.style.display = 'none';
+        return;
+      }
+
+      // Show user information
+      loginBox.style.display = 'none';
+      userBar.style.display = 'flex';
+      appContent.style.display = 'block';
+
+      document.getElementById('displayUsername').textContent = user.username;
+      const badge = document.getElementById('displayRoleBadge');
+      badge.textContent = user.role;
+      badge.className = 'badge badge-' + user.role.toLowerCase();
+
+      const permsText = document.getElementById('rolePermsText');
+      if (user.role === 'Student') {
+        permsText.textContent = 'Permissions: Search and view student records (Read Only).';
+      } else if (user.role === 'Faculty') {
+        permsText.textContent = 'Permissions: Search, Add, and Update student records (Read & Write).';
+      } else if (user.role === 'Admin') {
+        permsText.textContent = 'Permissions: Full administrative control (Add, Update, Delete, Drop/Create Tables).';
+      }
+
+      // Enforce Role Restrictions in UI
+      const boxes = document.querySelectorAll('[data-roles]');
+      boxes.forEach(box => {
+        const allowed = box.getAttribute('data-roles').split(',').map(s => s.trim());
+        const restrictedNote = box.querySelector('.restricted-note');
+        const formInputs = box.querySelectorAll('input:not([type="hidden"]), button');
+
+        if (!allowed.includes(user.role)) {
+          // Disable form and show note
+          box.classList.add('restricted-overlay');
+          if (restrictedNote) restrictedNote.style.display = 'block';
+          formInputs.forEach(inp => inp.disabled = true);
+        } else {
+          box.classList.remove('restricted-overlay');
+          if (restrictedNote) restrictedNote.style.display = 'none';
+          formInputs.forEach(inp => inp.disabled = false);
+        }
+      });
+    }
+
+    // Run on page load
+    document.addEventListener('DOMContentLoaded', renderUI);
+
+    const showAllBtn = document.getElementById('showAllBtn');
+    const recordsContainer = document.getElementById('records-container');
+    const recordsContent = document.getElementById('records-content');
+
+    showAllBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+
+      const user = getCurrentUser();
+      const role = user ? user.role : '';
+
+      try {
+        recordsContent.innerHTML = '<p>Loading records...</p>';
+        recordsContainer.style.display = 'block';
+
+        const response = await fetch('/select-all?userRole=' + encodeURIComponent(role));
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || ('Failed to fetch records (Status: ' + response.status + ')'));
+        }
+
+        const data = await response.json();
+
+        if (!data || data.length === 0) {
+          recordsContent.innerHTML = '<p>No records found.</p>';
+          return;
+        }
+
+        let tableHtml = `
+          <table>
+            <thead>
+              <tr>
+                <th>UID</th>
+                <th>Name</th>
+                <th>Course</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+
+        data.forEach(student => {
+          tableHtml += `
+            <tr>
+              <td>${escapeHtml(student.uid)}</td>
+              <td>${escapeHtml(student.name)}</td>
+              <td>${escapeHtml(student.course)}</td>
+            </tr>
+          `;
+        });
+
+        tableHtml += '</tbody></table>';
+        recordsContent.innerHTML = tableHtml;
+
+        // Smooth scroll to records
+        recordsContainer.scrollIntoView({ behavior: 'smooth' });
+      } catch (err) {
+        recordsContent.innerHTML = `<p style="color: red;">Error: ${escapeHtml(err.message)}</p>`;
+      }
+    });
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
+</body>
+</html>

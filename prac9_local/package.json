@@ -1,0 +1,15 @@
+{
+  "name": "practical-9-rbac",
+  "version": "1.0.0",
+  "description": "Practical 9: Role-Based Authentication and Access Control System using JavaScript",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "start:v1": "node server.js",
+    "start:sql": "node sql_auth_version/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mysql2": "^3.9.7"
+  }
+}

@@ -1,0 +1,450 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Student Management - Vue RBAC</title>
+
+  <!-- Vue 3 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 25px;
+      background: #f8f9fa;
+    }
+
+    .box {
+      background: white;
+      border: 1px solid #ddd;
+      padding: 16px;
+      margin-bottom: 18px;
+      max-width: 520px;
+      border-radius: 6px;
+    }
+
+    input {
+      display: block;
+      width: 95%;
+      padding: 8px;
+      margin: 8px 0;
+    }
+
+    button, input[type="submit"] {
+      background: #0d6efd;
+      color: white;
+      border: none;
+      padding: 8px 14px;
+      cursor: pointer;
+      width: auto;
+    }
+
+    .danger { background: #dc3545; }
+    .secondary { background: #6c757d; }
+
+    .restricted {
+      opacity: 0.5;
+    }
+
+    .error {
+      color: #dc3545;
+    }
+
+    a {
+      color: #0d6efd;
+      margin-right: 15px;
+      cursor: pointer;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: left;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="app">
+
+  <h1>Student Management System</h1>
+  <p>Practical 9 - Role-Based Access Control</p>
+
+  <!-- LOGIN -->
+  <div class="box" v-if="!user">
+
+    <h2>Login</h2>
+
+    <p>Quick Demo Accounts:</p>
+
+    <button @click="quickFill('admin', '123')">
+      Admin
+    </button>
+
+    <button @click="quickFill('faculty', '123')">
+      Faculty
+    </button>
+
+    <button @click="quickFill('student', '123')">
+      Student
+    </button>
+
+    <form @submit.prevent="handleLogin">
+
+      <label>Username:</label>
+      <input type="text" v-model="username" required>
+
+      <label>Password:</label>
+      <input type="password" v-model="password" required>
+
+      <button type="submit">Login</button>
+
+    </form>
+
+  </div>
+
+  <!-- DASHBOARD -->
+  <div v-else>
+
+    <div class="box">
+
+      <h3>Welcome, {{ user.username }}</h3>
+
+      <p>Role: <b>{{ user.role }}</b></p>
+
+      <p v-if="user.role === 'Admin'">
+        Permissions: Full Access
+      </p>
+
+      <p v-else-if="user.role === 'Faculty'">
+        Permissions: Add, Update, View
+      </p>
+
+      <p v-else>
+        Permissions: View Only
+      </p>
+
+      <button class="secondary" @click="handleLogout">
+        Logout
+      </button>
+
+    </div>
+
+    <!-- ADD STUDENT -->
+    <div class="box"
+         :class="{ restricted: !canEdit }">
+
+      <h2>Add Student</h2>
+
+      <form action="/insert" method="POST"
+            v-if="canEdit">
+
+        <input type="hidden" name="userRole"
+               :value="user.role">
+
+        <label>UID:</label>
+        <input type="text" name="uid" required>
+
+        <label>Name:</label>
+        <input type="text" name="name" required>
+
+        <label>Course:</label>
+        <input type="text" name="course" required>
+
+        <input type="submit" value="Add Record">
+
+      </form>
+
+      <p v-else class="error">
+        Only Faculty and Admin can add students.
+      </p>
+
+    </div>
+
+    <!-- UPDATE STUDENT -->
+    <div class="box"
+         :class="{ restricted: !canEdit }">
+
+      <h2>Update Student</h2>
+
+      <form action="/update" method="POST"
+            v-if="canEdit">
+
+        <input type="hidden" name="userRole"
+               :value="user.role">
+
+        <label>UID:</label>
+        <input type="text" name="uid" required>
+
+        <label>New Name:</label>
+        <input type="text" name="name" required>
+
+        <label>New Course:</label>
+        <input type="text" name="course" required>
+
+        <input type="submit" value="Update Record">
+
+      </form>
+
+      <p v-else class="error">
+        Only Faculty and Admin can update students.
+      </p>
+
+    </div>
+
+    <!-- SEARCH -->
+    <div class="box">
+
+      <h2>Search Student</h2>
+
+      <form action="/select-record" method="GET">
+
+        <input type="hidden" name="userRole"
+               :value="user.role">
+
+        <label>UID:</label>
+        <input type="text" name="uid" required>
+
+        <button type="submit">Search</button>
+
+      </form>
+
+    </div>
+
+    <!-- DELETE -->
+    <div class="box"
+         :class="{ restricted: !isAdmin }">
+
+      <h2>Delete Student</h2>
+
+      <form action="/delete" method="POST"
+            v-if="isAdmin">
+
+        <input type="hidden" name="userRole"
+               :value="user.role">
+
+        <label>UID:</label>
+        <input type="text" name="uid" required>
+
+        <input class="danger" type="submit"
+               value="Delete Record">
+
+      </form>
+
+      <p v-else class="error">
+        Only Admin can delete students.
+      </p>
+
+    </div>
+
+    <!-- DATABASE OPERATIONS -->
+    <div class="box">
+
+      <h2>Database Operations</h2>
+
+      <p>
+        <a href="#" @click.prevent="selectAll">
+          Select All
+        </a>
+
+        <a :href="'/select-unique?userRole=' + encodeURIComponent(user.role)">
+          Select Unique
+        </a>
+      </p>
+
+      <div v-if="isAdmin">
+
+        <a :href="'/drop-table?userRole=' + encodeURIComponent(user.role)">
+          Drop Table
+        </a>
+
+        <a :href="'/create-table?userRole=' + encodeURIComponent(user.role)">
+          Create Table
+        </a>
+
+      </div>
+
+      <p v-else class="error">
+        Table administration is Admin only.
+      </p>
+
+    </div>
+
+    <!-- DISPLAY RECORDS -->
+    <div class="box" v-if="showRecords">
+
+      <h2>All Student Records</h2>
+
+      <p v-if="loading">Loading...</p>
+
+      <p v-else-if="error" class="error">
+        {{ error }}
+      </p>
+
+      <p v-else-if="students.length === 0">
+        No records found.
+      </p>
+
+      <table v-else>
+
+        <tr>
+          <th>UID</th>
+          <th>Name</th>
+          <th>Course</th>
+        </tr>
+
+        <tr v-for="student in students"
+            :key="student.uid">
+
+          <td>{{ student.uid }}</td>
+          <td>{{ student.name }}</td>
+          <td>{{ student.course }}</td>
+
+        </tr>
+
+      </table>
+
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+
+const { createApp } = Vue;
+
+createApp({
+
+  data() {
+    return {
+      username: '',
+      password: '',
+
+      user: JSON.parse(
+        localStorage.getItem('p9_auth_user') || 'null'
+      ),
+
+      students: [],
+      showRecords: false,
+      loading: false,
+      error: ''
+    };
+  },
+
+  computed: {
+
+    canEdit() {
+      return this.user &&
+        ['Admin', 'Faculty'].includes(this.user.role);
+    },
+
+    isAdmin() {
+      return this.user && this.user.role === 'Admin';
+    }
+
+  },
+
+  methods: {
+
+    // Demo account autofill
+    quickFill(username, password) {
+      this.username = username;
+      this.password = password;
+    },
+
+    // Login
+    async handleLogin() {
+
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            username: this.username,
+            password: this.password
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          alert(data.message || 'Login failed');
+          return;
+        }
+
+        this.user = data.user;
+
+        localStorage.setItem(
+          'p9_auth_user',
+          JSON.stringify(data.user)
+        );
+
+        this.password = '';
+
+      } catch (err) {
+        alert('Login error: ' + err.message);
+      }
+
+    },
+
+    // Logout
+    handleLogout() {
+
+      localStorage.removeItem('p9_auth_user');
+
+      this.user = null;
+      this.username = '';
+      this.password = '';
+      this.students = [];
+      this.showRecords = false;
+      this.error = '';
+
+    },
+
+    // Display all records
+    async selectAll() {
+
+      this.showRecords = true;
+      this.loading = true;
+      this.error = '';
+      this.students = [];
+
+      try {
+
+        const response = await fetch(
+          '/select-all?userRole=' +
+          encodeURIComponent(this.user.role)
+        );
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch records');
+        }
+
+        this.students = await response.json();
+
+      } catch (err) {
+        this.error = err.message;
+      } finally {
+        this.loading = false;
+      }
+
+    }
+
+  }
+
+}).mount('#app');
+
+</script>
+
+</body>
+</html>
